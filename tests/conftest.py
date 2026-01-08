@@ -2,13 +2,21 @@ import os
 import sys
 import pathlib
 import importlib
-import pytest
-from fastapi.testclient import TestClient
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+from fastapi.testclient import TestClient
+from langchain_core.embeddings import Embeddings
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+# -----------------------
+# Temporary directories
+# -----------------------
 @dataclass
 class TmpDirs:
     workdir: Path
@@ -16,9 +24,18 @@ class TmpDirs:
     uploads_dir: Path
     index_dir: Path
 
+
 @pytest.fixture
 def tmp_dirs(tmp_path: Path) -> TmpDirs:
+    """
+    Provides an isolated temp workspace + common dirs.
+    Also chdirs into the workspace so relative paths like `faiss_index/test`
+    resolve inside tmp_path (matches your unit tests).
+    """
+    cwd = Path.cwd()
     workdir = tmp_path
+
+    # Common dirs your code/tests may use
     sessions_dir = workdir / "sessions"
     uploads_dir = workdir / "uploads"
     index_dir = workdir / "index"
@@ -27,37 +44,37 @@ def tmp_dirs(tmp_path: Path) -> TmpDirs:
     uploads_dir.mkdir(parents=True, exist_ok=True)
     index_dir.mkdir(parents=True, exist_ok=True)
 
-    return TmpDirs(
-        workdir=workdir,
-        sessions_dir=sessions_dir,
-        uploads_dir=uploads_dir,
-        index_dir=index_dir,
-    )
+    # Also create the dirs your app writes to by default
+    (workdir / "data").mkdir(parents=True, exist_ok=True)
+    (workdir / "faiss_index").mkdir(parents=True, exist_ok=True)
+
+    try:
+        os.chdir(workdir)
+        yield TmpDirs(
+            workdir=workdir,
+            sessions_dir=sessions_dir,
+            uploads_dir=uploads_dir,
+            index_dir=index_dir,
+        )
+    finally:
+        os.chdir(cwd)
 
 
-# --- Global, consistent environment for all tests ---
+# -----------------------
+# Global test environment
+# -----------------------
 @pytest.fixture(autouse=True)
 def _test_env(monkeypatch):
-    """
-    Ensures tests never depend on real API keys or developer machine env.
-    """
+    """Ensure tests never depend on real API keys/env."""
     monkeypatch.setenv("GROQ_API_KEY", "dummy")
     monkeypatch.setenv("GOOGLE_API_KEY", "dummy")
-
-    # Default provider for your app config loader
     monkeypatch.setenv("LLM_PROVIDER", "google")
-
-    # If you have config path logic in your code, you can set it here too:
-    # monkeypatch.setenv("CONFIG_PATH", str(ROOT / "multi_doc_chat" / "config" / "config.yaml"))
-
     yield
 
 
 @pytest.fixture(autouse=True)
 def _ensure_repo_root_on_path():
-    """
-    Makes `import main` and `import multi_doc_chat...` reliable in local + CI.
-    """
+    """Make `import main` and `import multi_doc_chat...` reliable in local + CI."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     yield
@@ -66,8 +83,7 @@ def _ensure_repo_root_on_path():
 @pytest.fixture
 def tmp_workdir(tmp_path: pathlib.Path):
     """
-    Run tests in an isolated working directory.
-    Useful because your code writes to ./data and ./faiss_index.
+    (Used by integration/app tests) Run in an isolated working directory.
     """
     cwd = pathlib.Path.cwd()
     try:
@@ -79,13 +95,24 @@ def tmp_workdir(tmp_path: pathlib.Path):
         os.chdir(cwd)
 
 
-# ---- Stubs ----
-class _StubEmbeddings:
-    def embed_query(self, text: str):
-        return [0.0, 0.1, 0.2]
+# -----------------------
+# Stubs
+# -----------------------
+class StubEmbeddings(Embeddings):
+    """Deterministic tiny embeddings for tests (FAISS expects an Embeddings object)."""
 
-    def embed_documents(self, texts):
-        return [[0.0, 0.1, 0.2] for _ in texts]
+    def __init__(self, size: int = 8):
+        self.size = size
+
+    def _vec(self, text: str) -> list[float]:
+        h = hashlib.sha256(text.encode("utf-8")).digest()
+        return [b / 255.0 for b in h[: self.size]]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vec(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vec(text)
 
 
 class _StubLLM:
@@ -124,24 +151,29 @@ def stub_model_loader(monkeypatch):
             }
 
         def load_embeddings(self):
-            return _StubEmbeddings()
+            # IMPORTANT: return an Embeddings instance (not a callable object)
+            return StubEmbeddings(size=8)
 
         def load_llm(self):
             return _StubLLM()
 
-    # Patch at the source
+    # Patch at the source module
     monkeypatch.setattr(ml_mod, "ApiKeyManager", FakeApiKeyMgr, raising=True)
     monkeypatch.setattr(ml_mod, "ModelLoader", FakeModelLoader, raising=True)
 
     # Patch any modules that imported ModelLoader already
     import multi_doc_chat.src.document_ingestion.data_ingestion as di
     import multi_doc_chat.src.document_chat.retrieval as r
+
     monkeypatch.setattr(di, "ModelLoader", FakeModelLoader, raising=True)
     monkeypatch.setattr(r, "ModelLoader", FakeModelLoader, raising=True)
 
     yield FakeModelLoader
 
 
+# -----------------------
+# App + client fixtures
+# -----------------------
 @pytest.fixture
 def app(stub_model_loader, tmp_workdir):
     """
@@ -153,7 +185,6 @@ def app(stub_model_loader, tmp_workdir):
     else:
         main = importlib.import_module("main")
 
-    # Ensure clean state each test
     if hasattr(main, "SESSIONS"):
         main.SESSIONS.clear()
 
@@ -167,9 +198,6 @@ def client(app):
 
 @pytest.fixture
 def clear_sessions():
-    """
-    Useful if you import main somewhere else and want to ensure clean session state.
-    """
     import main
     main.SESSIONS.clear()
     yield
