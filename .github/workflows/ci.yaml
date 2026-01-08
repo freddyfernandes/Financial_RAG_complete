@@ -24,8 +24,6 @@ jobs:
       - name: Install dependencies (locked)
         run: |
           uv sync --frozen
-          uv pip install -e .
-          uv pip install pytest
 
       - name: Run tests
         env:
