@@ -16,18 +16,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Sync dependencies with uv (locked)
+      - name: Install dependencies (locked)
         run: |
           uv sync --frozen
+          uv pip install -e .
           uv pip install pytest
+
       - name: Run tests
         env:
-          PYTHONPATH: ${{ github.workspace }}/multi_doc_chat
+          PYTHONPATH: ${{ github.workspace }}
           GROQ_API_KEY: dummy
           GOOGLE_API_KEY: dummy
           LLM_PROVIDER: google
