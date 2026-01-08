@@ -23,6 +23,7 @@ jobs:
 
       - name: Install dependencies (locked)
         run: |
+          uv venv --python 3.12
           uv sync --frozen
           uv pip install pytest
 
