@@ -6,6 +6,33 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+from dataclasses import dataclass
+from pathlib import Path
+
+@dataclass
+class TmpDirs:
+    workdir: Path
+    sessions_dir: Path
+    uploads_dir: Path
+    index_dir: Path
+
+@pytest.fixture
+def tmp_dirs(tmp_path: Path) -> TmpDirs:
+    workdir = tmp_path
+    sessions_dir = workdir / "sessions"
+    uploads_dir = workdir / "uploads"
+    index_dir = workdir / "index"
+
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    index_dir.mkdir(parents=True, exist_ok=True)
+
+    return TmpDirs(
+        workdir=workdir,
+        sessions_dir=sessions_dir,
+        uploads_dir=uploads_dir,
+        index_dir=index_dir,
+    )
 
 
 # --- Global, consistent environment for all tests ---
