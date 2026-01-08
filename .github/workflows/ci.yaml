@@ -13,19 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv (and Python)
+        uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v4
-
       - name: Install dependencies (locked)
         run: |
-          uv venv --python 3.12
           uv sync --frozen
           uv pip install pytest
+
+      - name: Sanity check Python
+        run: |
+          uv run python -V
 
       - name: Run tests
         env:
