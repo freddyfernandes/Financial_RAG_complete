@@ -1,13 +1,6 @@
 pipeline {
   agent any
 
-  options {
-    timestamps()
-    ansiColor('xterm')
-    disableConcurrentBuilds()
-    buildDiscarder(logRotator(numToKeepStr: '20'))
-  }
-
   parameters {
     booleanParam(
       name: 'RUN_DEPLOY',
