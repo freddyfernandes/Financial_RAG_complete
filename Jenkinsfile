@@ -4,7 +4,7 @@ pipeline {
   parameters {
     booleanParam(
       name: 'RUN_DEPLOY',
-      defaultValue: false,
+      defaultValue: True,
       description: 'Set to true to deploy to Azure Container Apps after tests pass.'
     )
     string(
@@ -16,7 +16,7 @@ pipeline {
 
   triggers {
     // Every 30 minutes
-    cron('* * * * *')
+    cron('H * * * *')
   }
 
   environment {
