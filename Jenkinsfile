@@ -30,7 +30,7 @@ pipeline {
     // Azure auth (stored as Jenkins credentials)
     AZURE_TENANT_ID        = credentials('azure-tenant-id')
     AZURE_SUBSCRIPTION_ID  = credentials('azure-subscription-id')
-    AZURE_SP               = credentials('azure-sp') // creates AZURE_SP_USR and AZURE_SP_PSW
+    AZURE_SP               = credentials('azure-sp') 
 
     // ---- Adjust these to YOUR actual Azure resources ----
     LOCATION          = 'germanywestcentral'
