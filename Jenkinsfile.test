@@ -67,7 +67,7 @@ pipeline {
         
         stage('Install Dependencies') {
             steps {
-                echo '📥 Installing project dependencies...'
+                echo 'Installing project dependencies...'
                 sh '''
                     set -e
                     VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
