@@ -2,17 +2,8 @@ pipeline {
   agent any
 
   parameters {
-    booleanParam(
-      name: 'RUN_DEPLOY',
-      defaultValue: True,
-      description: 'Set to true to deploy to Azure Container Apps after tests pass.'
-    )
-    string(
-      name: 'IMAGE_TAG',
-      defaultValue: '',
-      description: 'Optional: override image tag (default = BUILD_NUMBER)'
-    )
-  }
+  booleanParam(name: 'RUN_DEPLOY', defaultValue: false, description: 'Deploy after tests pass')
+}
 
   triggers {
     // Every 30 minutes
