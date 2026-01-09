@@ -1,11 +1,6 @@
 pipeline {
   agent any
 
-  triggers {
-    // Every 30 minutes (hashed to spread load)
-    cron('* * * * *')
-  }
-
   options {
     timestamps()
     ansiColor('xterm')
@@ -14,39 +9,53 @@ pipeline {
   }
 
   parameters {
-    string(name: 'IMAGE_TAG', defaultValue: '', description: 'Optional: override image tag (default = BUILD_NUMBER)')
+    booleanParam(
+      name: 'RUN_DEPLOY',
+      defaultValue: false,
+      description: 'Set to true to deploy to Azure Container Apps after tests pass.'
+    )
+    string(
+      name: 'IMAGE_TAG',
+      defaultValue: '',
+      description: 'Optional: override image tag (default = BUILD_NUMBER)'
+    )
+  }
+
+  triggers {
+    // Every 30 minutes
+    cron('* * * * *')
   }
 
   environment {
-    // Python settings (from your screenshot)
+    // Python settings
     PYTHON_VERSION = '3.12'
     PYTHONPATH     = "${WORKSPACE}:${WORKSPACE}/multi_doc_chat"
 
-    // API keys (stored as Jenkins Secret Text credentials)
-    GROQ_API_KEY   = credentials('groq-api-key')
-    GOOGLE_API_KEY = credentials('google-api-key')
-    LLM_PROVIDER   = 'google'
+    // API keys (taken from Jenkins job env; keep blank if not set)
+    GROQ_API_KEY   = "${env.GROQ_API_KEY ?: ''}"
+    GOOGLE_API_KEY = "${env.GOOGLE_API_KEY ?: ''}"
+    LLM_PROVIDER   = "${env.LLM_PROVIDER ?: 'groq'}"
 
-    // Azure auth (stored as Jenkins credentials)
-    AZURE_TENANT_ID        = credentials('azure-tenant-id')
-    AZURE_SUBSCRIPTION_ID  = credentials('azure-subscription-id')
-    AZURE_SP               = credentials('azure-sp') 
+    // Azure Container Apps config (EDIT THESE)
+    APP_LOCATION       = 'germanywestcentral'
+    APP_RESOURCE_GROUP = 'llmops-app'
+    CONTAINER_APP_ENV  = 'llmops-app-env'
+    CONTAINER_APP_NAME = 'llmops-app'
 
-    // ---- Adjust these to YOUR actual Azure resources ----
-    LOCATION          = 'germanywestcentral'
-    APP_RESOURCE_GROUP = 'llmops-app'       // your app RG (NOT the Jenkins RG)
-    CONTAINER_APP_ENV  = 'llmops-app-env'         // Container Apps Environment name
-    CONTAINER_APP_NAME = 'llmops-app'             // Container App name
+    // ACR (EDIT THIS)
+    APP_ACR_NAME       = 'llmopsjenkinsacr9163'
 
-    // ACR (use the real one from `az acr list -o table`)
-    APP_ACR_NAME      = 'llmopsjenkinsacr9163'
-    IMAGE_NAME        = 'llmops-app'
-    CONTAINER_PORT    = '8080'
+    // App container config
+    IMAGE_NAME      = 'llmops-app'
+    CONTAINER_PORT  = '8080'
+    MIN_REPLICAS    = '1'
+    MAX_REPLICAS    = '3'
   }
 
   stages {
     stage('Checkout') {
       steps {
+        echo 'Checking out code from repository...'
         checkout scm
       }
     }
@@ -62,77 +71,122 @@ pipeline {
       }
     }
 
-    stage('Unit Tests') {
+    stage('Setup Python Environment (uv + venv)') {
       steps {
         sh '''
           set -euo pipefail
-          python -V
 
-          # Create venv in workspace to keep agent clean
-          python -m venv .venv
-          . .venv/bin/activate
+          # Install uv (fast Python package manager)
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          UV="$HOME/.local/bin/uv"
 
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          pip install pytest
+          # Avoid Azure Files quirks by storing uv data outside Jenkins HOME
+          export UV_PYTHON_INSTALL_DIR=/tmp/uv/python
+          export XDG_DATA_HOME=/tmp/.local/share
+          export XDG_CACHE_HOME=/tmp/.cache
 
-          pytest -q
+          # Install the requested Python version and create a venv
+          "$UV" python install "${PYTHON_VERSION}"
+          "$UV" venv --python "${PYTHON_VERSION}" "/tmp/venv-${BUILD_NUMBER}"
+
+          /tmp/venv-${BUILD_NUMBER}/bin/python --version
+          "$UV" --version
         '''
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        sh '''
+          set -euo pipefail
+          UV="$HOME/.local/bin/uv"
+          VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
+
+          export XDG_DATA_HOME=/tmp/.local/share
+          export XDG_CACHE_HOME=/tmp/.cache
+
+          # Create a sanitised requirements file removing local-only / OS-specific deps
+          SAN_REQ="$(mktemp)"
+          cat requirements.txt \
+            | sed -E '/^[[:space:]]*llmops-series(==.*)?[[:space:]]*$/d' \
+            | sed -E '/^[[:space:]]*pywin32(==.*)?[[:space:]]*$/d' \
+            > "$SAN_REQ"
+
+          "$UV" pip install --python "$VENV_PY" -r "$SAN_REQ"
+          "$UV" pip install --python "$VENV_PY" pytest pytest-cov
+
+          echo "Using PYTHONPATH=${PYTHONPATH}"
+        '''
+      }
+    }
+
+    stage('Run Tests') {
+      steps {
+        sh '''
+          set -euo pipefail
+          . "/tmp/venv-${BUILD_NUMBER}/bin/activate"
+
+          mkdir -p test-reports
+
+          pytest tests/ \
+            --verbose \
+            --junitxml=test-reports/junit.xml \
+            --cov=multi_doc_chat \
+            --cov-report=xml:test-reports/coverage.xml \
+            --cov-report=term
+        '''
+      }
+      post {
+        always {
+          echo 'Publishing test reports...'
+          junit allowEmptyResults: true, testResults: 'test-reports/junit.xml'
+          archiveArtifacts artifacts: 'test-reports/**', allowEmptyArchive: true
+        }
       }
     }
 
     stage('Azure Login') {
+      when { expression { return params.RUN_DEPLOY } }
       steps {
-        sh '''
-          set -euo pipefail
+        echo 'Logging into Azure...'
+        withCredentials([
+          string(credentialsId: 'azure-client-id', variable: 'AZURE_CLIENT_ID'),
+          string(credentialsId: 'azure-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+          string(credentialsId: 'azure-tenant-id', variable: 'AZURE_TENANT_ID'),
+          string(credentialsId: 'azure-subscription-id', variable: 'AZURE_SUBSCRIPTION_ID')
+        ]) {
+          sh '''
+            set -euo pipefail
+            az version
 
-          az version
+            az login --service-principal \
+              -u "$AZURE_CLIENT_ID" \
+              -p "$AZURE_CLIENT_SECRET" \
+              --tenant "$AZURE_TENANT_ID" >/dev/null
 
-          # Login using Service Principal from Jenkins credentials
-          az login --service-principal \
-            -u "$AZURE_SP_USR" \
-            -p "$AZURE_SP_PSW" \
-            --tenant "$AZURE_TENANT_ID" \
-            >/dev/null
-
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-
-          echo "Azure account:"
-          az account show --query "{name:name,id:id,tenantId:tenantId}" -o json
-        '''
+            az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+            az account show --query "{name:name,id:id,tenantId:tenantId}" -o json
+          '''
+        }
       }
     }
 
-    stage('Resolve ACR + Login') {
+    stage('Build & Push Image to ACR') {
+      when { expression { return params.RUN_DEPLOY } }
       steps {
         sh '''
           set -euo pipefail
 
-          # Resolve ACR login server
-          ACR_LOGIN_SERVER="$(az acr show -n "$APP_ACR_NAME" -g "$APP_RESOURCE_GROUP" --query loginServer -o tsv)"
-          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER" > acr.env
+          # Resolve ACR login server + credentials
+          ACR_LOGIN_SERVER="$(az acr show -n "$APP_ACR_NAME" --query loginServer -o tsv)"
+          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER"
 
-          # Admin must be enabled on ACR for credential show (or use managed identity instead)
           ACR_USERNAME="$(az acr credential show -n "$APP_ACR_NAME" --query username -o tsv)"
-          ACR_PASSWORD="$(az acr credential show -n "$APP_ACR_NAME" --query passwords[0].value -o tsv)"
-          echo "ACR_USERNAME=$ACR_USERNAME" >> acr.env
-          echo "ACR_PASSWORD=$ACR_PASSWORD" >> acr.env
+          ACR_PASSWORD="$(az acr credential show -n "$APP_ACR_NAME" --query 'passwords[0].value' -o tsv)"
 
-          # Log docker into ACR
           az acr login -n "$APP_ACR_NAME"
-        '''
-      }
-    }
 
-    stage('Build & Push Docker Image') {
-      steps {
-        sh '''
-          set -euo pipefail
-          . ./acr.env
-
-          FULL_IMAGE="$ACR_LOGIN_SERVER/$IMAGE_NAME:$EFFECTIVE_TAG"
+          FULL_IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${EFFECTIVE_TAG}"
           echo "Building: $FULL_IMAGE"
 
           docker build -t "$FULL_IMAGE" .
@@ -144,86 +198,100 @@ pipeline {
     }
 
     stage('Deploy to Azure Container Apps') {
+      when { expression { return params.RUN_DEPLOY } }
       steps {
         sh '''
           set -euo pipefail
-          . ./acr.env
+
           FULL_IMAGE="$(cat image.txt)"
+          ACR_LOGIN_SERVER="$(az acr show -n "$APP_ACR_NAME" --query loginServer -o tsv)"
+          ACR_USERNAME="$(az acr credential show -n "$APP_ACR_NAME" --query username -o tsv)"
+          ACR_PASSWORD="$(az acr credential show -n "$APP_ACR_NAME" --query 'passwords[0].value' -o tsv)"
 
-          # Ensure RG exists
-          az group create -n "$APP_RESOURCE_GROUP" -l "$LOCATION" -o none
-
-          # Ensure Container Apps extension is available
+          # Ensure containerapp extension exists
           az extension add --name containerapp --upgrade -o none || true
 
-          # Ensure env exists (create if missing)
+          # Ensure RG exists
+          if [ "$(az group exists -n "$APP_RESOURCE_GROUP")" != "true" ]; then
+            az group create -n "$APP_RESOURCE_GROUP" -l "$APP_LOCATION" -o none
+          fi
+
+          # Ensure Container Apps environment exists
           if ! az containerapp env show -n "$CONTAINER_APP_ENV" -g "$APP_RESOURCE_GROUP" >/dev/null 2>&1; then
-            echo "Creating Container Apps Environment: $CONTAINER_APP_ENV"
-            az containerapp env create -n "$CONTAINER_APP_ENV" -g "$APP_RESOURCE_GROUP" -l "$LOCATION" -o none
-          else
-            echo "Container Apps Environment exists: $CONTAINER_APP_ENV"
+            echo "Creating Container Apps environment: $CONTAINER_APP_ENV"
+            az containerapp env create -n "$CONTAINER_APP_ENV" -g "$APP_RESOURCE_GROUP" -l "$APP_LOCATION" -o none
           fi
 
-          # Store/update secrets in the Container App (works for both create/update flows)
-          # (If app doesn't exist yet, we’ll create it first, then set secrets again if needed.)
-          APP_EXISTS=0
+          # Create or update the Container App
           if az containerapp show -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" >/dev/null 2>&1; then
-            APP_EXISTS=1
-          fi
+            echo "Updating Container App image: $CONTAINER_APP_NAME"
 
-          if [ "$APP_EXISTS" -eq 0 ]; then
-            echo "Creating Container App: $CONTAINER_APP_NAME"
-
-            az containerapp create \
-              -n "$CONTAINER_APP_NAME" \
-              -g "$APP_RESOURCE_GROUP" \
-              --environment "$CONTAINER_APP_ENV" \
-              --image "$FULL_IMAGE" \
-              --registry-server "$ACR_LOGIN_SERVER" \
-              --registry-username "$ACR_USERNAME" \
-              --registry-password "$ACR_PASSWORD" \
-              --ingress external \
-              --target-port "$CONTAINER_PORT" \
-              --secrets groq-api-key="$GROQ_API_KEY" google-api-key="$GOOGLE_API_KEY" \
-              --env-vars \
-                GROQ_API_KEY=secretref:groq-api-key \
-                GOOGLE_API_KEY=secretref:google-api-key \
-                LLM_PROVIDER="$LLM_PROVIDER" \
-              -o none
-          else
-            echo "Updating Container App image + env vars: $CONTAINER_APP_NAME"
-
-            # Update secrets (in case keys changed)
+            # Update secrets
             az containerapp secret set \
-              -n "$CONTAINER_APP_NAME" \
-              -g "$APP_RESOURCE_GROUP" \
+              -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" \
               --secrets groq-api-key="$GROQ_API_KEY" google-api-key="$GOOGLE_API_KEY" \
               -o none
 
-            # Update image and env vars
+            # Update image + env vars
             az containerapp update \
-              -n "$CONTAINER_APP_NAME" \
-              -g "$APP_RESOURCE_GROUP" \
+              -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" \
               --image "$FULL_IMAGE" \
               --set-env-vars \
                 GROQ_API_KEY=secretref:groq-api-key \
                 GOOGLE_API_KEY=secretref:google-api-key \
                 LLM_PROVIDER="$LLM_PROVIDER" \
               -o none
+          else
+            echo "Creating Container App: $CONTAINER_APP_NAME"
+
+            az containerapp create \
+              -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" \
+              --environment "$CONTAINER_APP_ENV" \
+              --image "$FULL_IMAGE" \
+              --ingress external \
+              --target-port "$CONTAINER_PORT" \
+              --min-replicas "$MIN_REPLICAS" \
+              --max-replicas "$MAX_REPLICAS" \
+              --registry-server "$ACR_LOGIN_SERVER" \
+              --registry-username "$ACR_USERNAME" \
+              --registry-password "$ACR_PASSWORD" \
+              --secrets groq-api-key="$GROQ_API_KEY" google-api-key="$GOOGLE_API_KEY" \
+              --env-vars \
+                GROQ_API_KEY=secretref:groq-api-key \
+                GOOGLE_API_KEY=secretref:google-api-key \
+                LLM_PROVIDER="$LLM_PROVIDER" \
+              -o none
           fi
 
-          # Print URL
-          FQDN="$(az containerapp show -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
-          echo "APP_URL=https://$FQDN" | tee app_url.txt
+          # Output URL
+          FQDN="$(az containerapp show -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" --query "properties.configuration.ingress.fqdn" -o tsv)"
+          echo "https://${FQDN}" | tee app_url.txt
         '''
       }
     }
 
-    stage('Show App URL') {
+    stage('Verify Deployment') {
+      when { expression { return params.RUN_DEPLOY } }
       steps {
         sh '''
           set -euo pipefail
-          cat app_url.txt
+
+          APP_URL="$(cat app_url.txt)"
+          echo "Application URL: $APP_URL"
+
+          # Basic health check
+          HTTP_CODE="$(curl -o /dev/null -s -w "%{http_code}\n" "$APP_URL/" || echo "000")"
+          echo "HTTP status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "307" ]; then
+            echo "Deployment verified OK."
+          else
+            echo "Health check failed."
+            exit 1
+          fi
+
+          # Tail logs (best-effort)
+          az containerapp logs show -n "$CONTAINER_APP_NAME" -g "$APP_RESOURCE_GROUP" --tail 50 || true
         '''
       }
     }
@@ -231,13 +299,17 @@ pipeline {
 
   post {
     always {
-      echo "Pipeline finished (success or fail)."
+      echo "Pipeline finished."
+      sh '''
+        set +e
+        rm -rf "/tmp/venv-${BUILD_NUMBER}" 2>/dev/null || true
+      '''
+    }
+    success {
+      echo "Pipeline completed successfully."
     }
     failure {
-      echo "If deploy failed, check:"
-      echo "  - ACR exists and admin enabled (or switch to managed identity)"
-      echo "  - Container Apps Environment exists and region is allowed"
-      echo "  - Service principal has Contributor on RG + ACR pull rights"
+      echo "Pipeline failed. Check console output for details."
     }
   }
 }
