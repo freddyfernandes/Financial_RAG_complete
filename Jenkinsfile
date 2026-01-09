@@ -39,7 +39,7 @@ pipeline {
     CONTAINER_APP_NAME = 'llmops-app'             // Container App name
 
     // ACR (use the real one from `az acr list -o table`)
-    APP_ACR_NAME      = 'llmopsjenkinsacr25267'
+    APP_ACR_NAME      = 'llmopsjenkinsacr9163'
     IMAGE_NAME        = 'llmops-app'
     CONTAINER_PORT    = '8080'
   }
