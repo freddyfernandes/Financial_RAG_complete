@@ -5,9 +5,9 @@ USER root
 # Base deps
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv \
-    git curl unzip ca-certificates lsb-release gnupg sudo \
-    docker.io \
+    docker-cli \
+    docker-compose \
+    docker-buildx \
  && rm -rf /var/lib/apt/lists/*
 
 # AWS CLI v2

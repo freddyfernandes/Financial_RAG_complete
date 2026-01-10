@@ -1,15 +1,3 @@
-/*
- * Jenkins Pipeline for MultiDocChat Application Deployment to AWS EKS
- * 
- * This pipeline builds, pushes, and deploys the MultiDocChat application:
- * - Builds Docker image
- * - Pushes to ECR
- * - Deploys to EKS with zero-downtime rolling updates
- * 
- * Trigger: Automatic (SCM polling every 5 minutes) or Manual
- * Duration: ~5-10 minutes
- */
-
 pipeline {
     agent any
     
@@ -20,11 +8,11 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = "${env.AWS_SECRET_ACCESS_KEY}"
         
         // EKS Configuration
-        EKS_CLUSTER_NAME = "${env.EKS_CLUSTER_NAME ?: 'llmops_live_cluster_new'}"
+        EKS_CLUSTER_NAME = "${env.EKS_CLUSTER_NAME}"
         
         // ECR Configuration
         ECR_REGISTRY = "${env.ECR_REGISTRY}"  // Format: account-id.dkr.ecr.region.amazonaws.com
-        ECR_REPOSITORY = "${env.ECR_REPOSITORY ?: 'llmopsrepolive_new'}"
+        ECR_REPOSITORY = "${env.ECR_REPOSITORY}"
         
         // Application Secrets
         GROQ_API_KEY = "${env.GROQ_API_KEY ?: ''}"
