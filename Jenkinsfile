@@ -155,31 +155,30 @@ pipeline {
       }
     }
 
-    stage('Build & Push Image to ACR') {
-      when { expression { return params.RUN_DEPLOY } }
-      steps {
-        sh '''
-          set -euo pipefail
+    stage('Build & Push Image to ACR (ACR Tasks)') {
+  when { expression { return params.RUN_DEPLOY } }
+  steps {
+    sh '''
+      set -euxo pipefail
 
-          # Resolve ACR login server + credentials
-          ACR_LOGIN_SERVER="$(az acr show -n "$APP_ACR_NAME" --query loginServer -o tsv)"
-          echo "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER"
+      # Resolve login server (for FULL_IMAGE)
+      ACR_LOGIN_SERVER="$(az acr show -n "$APP_ACR_NAME" --query loginServer -o tsv)"
+      FULL_IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${EFFECTIVE_TAG}"
+      echo "Will build and push (in ACR): $FULL_IMAGE"
 
-          ACR_USERNAME="$(az acr credential show -n "$APP_ACR_NAME" --query username -o tsv)"
-          ACR_PASSWORD="$(az acr credential show -n "$APP_ACR_NAME" --query 'passwords[0].value' -o tsv)"
+      # Build in Azure (no local docker required) and push to ACR
+      # Uses Dockerfile in repo root; change --file if yours differs
+      az acr build \
+        --registry "$APP_ACR_NAME" \
+        --image "${IMAGE_NAME}:${EFFECTIVE_TAG}" \
+        --file Dockerfile \
+        .
 
-          az acr login -n "$APP_ACR_NAME"
+      echo "$FULL_IMAGE" > image.txt
+    '''
+  }
+}
 
-          FULL_IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_NAME}:${EFFECTIVE_TAG}"
-          echo "Building: $FULL_IMAGE"
-
-          docker build -t "$FULL_IMAGE" .
-          docker push "$FULL_IMAGE"
-
-          echo "$FULL_IMAGE" > image.txt
-        '''
-      }
-    }
 
     stage('Deploy to Azure Container Apps') {
       when { expression { return params.RUN_DEPLOY } }
