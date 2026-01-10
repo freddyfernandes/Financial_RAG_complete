@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-doc-chat-live
+  labels:
+    app: multi-doc-chat-live
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: multi-doc-chat-live
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: multi-doc-chat-live
+    spec:
+      imagePullSecrets:
+      - name: ecr-registry-secret
+      containers:
+      - name: multi-doc-chat-live
+        image: <ECR_REGISTRY>/<ECR_REPOSITORY>:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: multi-doc-chat-live-secrets
+              key: GROQ_API_KEY
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: multi-doc-chat-live-secrets
+              key: OPENAI_API_KEY
+              optional: true
+        - name: GOOGLE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: multi-doc-chat-live-secrets
+              key: GOOGLE_API_KEY
+              optional: true
+        - name: LLM_PROVIDER
+          value: "groq"
+        - name: PYTHONPATH
+          value: "/app:/app/multi_doc_chat"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3

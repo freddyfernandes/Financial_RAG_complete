@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: multi-doc-chat-service
+  labels:
+    app: multi-doc-chat-live
+spec:
+  type: LoadBalancer
+  selector:
+    app: multi-doc-chat-live
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: None
