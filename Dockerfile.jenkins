@@ -1,36 +1,40 @@
-FROM jenkins/jenkins:lts
+FROM --platform=linux/amd64 jenkins/jenkins:lts
 
 USER root
 
-# Install Python 3 and dependencies
-RUN apt-get update && \
-    apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    git \
-    curl \
-    ca-certificates \
-    lsb-release \
-    gnupg \
-    && rm -rf /var/lib/apt/lists/*
+# Base deps
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    git curl unzip ca-certificates lsb-release gnupg sudo \
+    docker.io \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install Azure CLI
-RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+# AWS CLI v2
+RUN curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+ && unzip -q /tmp/awscliv2.zip -d /tmp \
+ && /tmp/aws/install \
+ && rm -rf /tmp/aws /tmp/awscliv2.zip
 
-# Install Docker CLI (for building images in Jenkins)
-RUN apt-get update && \
-    apt-get install -y docker.io && \
-    rm -rf /var/lib/apt/lists/*
+# kubectl
+RUN curl -L "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
+ && chmod +x /usr/local/bin/kubectl
 
-# Create symbolic link for python command
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# python -> python3
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Pre-install essential Jenkins plugins for this pipeline
+# Jenkins plugins
 RUN jenkins-plugin-cli --plugins "git workflow-aggregator junit github-branch-source"
 
-# Configure git to allow all directories (fixes dubious ownership errors in Jenkins)
+# Git safe directory (dubious ownership)
 RUN git config --system --add safe.directory '*'
 
-# Switch back to jenkins user
-USER jenkins
+# Docker group + sudo
+RUN groupadd -f docker \
+ && usermod -aG docker,root jenkins \
+ && echo "jenkins ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# If you need Docker builds, mount the host Docker socket when running the Jenkins container:
+# -v /var/run/docker.sock:/var/run/docker.sock
+
+USER root

@@ -1,0 +1,302 @@
+/*
+ * Jenkins Pipeline for AWS EKS Infrastructure Provisioning
+ * 
+ * This pipeline provisions the complete AWS infrastructure for MultiDocChat:
+ * - VPC with public subnets
+ * - EKS cluster with worker nodes
+ * - ECR repository
+ * - Security groups and IAM roles
+ * 
+ * Trigger: Manual only (run once to create infrastructure)
+ * Duration: ~20-30 minutes
+ */
+
+pipeline {
+    agent any
+    
+    environment {
+        // AWS Configuration (set these as environment variables in Jenkins)
+        AWS_REGION = "${env.AWS_REGION}"
+        AWS_ACCESS_KEY_ID = "${env.AWS_ACCESS_KEY_ID}"
+        AWS_SECRET_ACCESS_KEY = "${env.AWS_SECRET_ACCESS_KEY}"
+        
+        // Stack Configuration
+        STACK_NAME = 'multi-doc-chat-eks-stack'
+        TEMPLATE_FILE = 'infra/eks-with-ecr.yaml'
+
+        
+        // Cluster Configuration
+        CLUSTER_NAME = 'llmops_live_cluster'
+        NODE_INSTANCE_TYPE = 't3.medium'
+        DESIRED_CAPACITY = '2'
+        MIN_SIZE = '1'
+        MAX_SIZE = '3'
+        ECR_REPOSITORY = 'llmopsrepolive'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '📦 Checking out code from repository...'
+                checkout scm
+            }
+        }
+        
+        stage('Validate CloudFormation Template') {
+            steps {
+                echo '🔍 Validating CloudFormation template...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        # Check if template file exists
+                        if [ ! -f "${TEMPLATE_FILE}" ]; then
+                            echo "❌ Template file not found: ${TEMPLATE_FILE}"
+                            exit 1
+                        fi
+                        
+                        # Validate template syntax
+                        aws cloudformation validate-template \
+                            --template-body file://${TEMPLATE_FILE} \
+                            --region ${AWS_REGION}
+                        
+                        echo "✅ Template validation successful!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Check Existing Stack') {
+            steps {
+                echo '🔍 Checking if stack already exists...'
+                script {
+                    def stackStatus = sh(
+                        script: """
+                            aws cloudformation describe-stacks \
+                                --stack-name ${STACK_NAME} \
+                                --region ${AWS_REGION} \
+                                --query 'Stacks[0].StackStatus' \
+                                --output text 2>/dev/null || echo "NOT_FOUND"
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (stackStatus == "NOT_FOUND") {
+                        echo "✅ Stack does not exist. Will create it."
+                        env.STACK_ACTION = 'create'
+                    } else if (stackStatus == "ROLLBACK_COMPLETE") {
+                        echo "⚠️  Stack is in ROLLBACK_COMPLETE state. Deleting it first..."
+                        sh """
+                            aws cloudformation delete-stack \
+                                --stack-name ${STACK_NAME} \
+                                --region ${AWS_REGION}
+                            
+                            echo "⏳ Waiting for stack deletion to complete..."
+                            aws cloudformation wait stack-delete-complete \
+                                --stack-name ${STACK_NAME} \
+                                --region ${AWS_REGION}
+                            
+                            echo "✅ Stack deleted. Will create new stack."
+                        """
+                        env.STACK_ACTION = 'create'
+                    } else {
+                        echo "⚠️  Stack exists with status: ${stackStatus}. Will update it."
+                        env.STACK_ACTION = 'update'
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy CloudFormation Stack') {
+            steps {
+                echo "🚀 ${env.STACK_ACTION == 'create' ? 'Creating' : 'Updating'} CloudFormation stack..."
+                echo "⏱️  This will take approximately 20-30 minutes. Please be patient..."
+                script {
+                    sh """
+                        set -e
+                        
+                        # Deploy stack
+                        aws cloudformation deploy \
+                            --template-file ${TEMPLATE_FILE} \
+                            --stack-name ${STACK_NAME} \
+                            --region ${AWS_REGION} \
+                            --parameter-overrides \
+                                ClusterName=${CLUSTER_NAME} \
+                                NodeInstanceType=${NODE_INSTANCE_TYPE} \
+                                DesiredCapacity=${DESIRED_CAPACITY} \
+                                MinSize=${MIN_SIZE} \
+                                MaxSize=${MAX_SIZE} \
+                                ECRRepositoryName=${ECR_REPOSITORY} \
+                            --capabilities CAPABILITY_IAM \
+                            --no-fail-on-empty-changeset
+                        
+                        echo "✅ CloudFormation stack deployed successfully!"
+                    """
+                }
+            }
+        }
+        
+        stage('Wait for Stack Completion') {
+            steps {
+                echo '⏳ Waiting for stack to reach stable state...'
+                script {
+                    sh """
+                        set -e
+                        
+                        # Wait for stack to be ready
+                        aws cloudformation wait stack-${env.STACK_ACTION == 'create' ? 'create' : 'update'}-complete \
+                            --stack-name ${STACK_NAME} \
+                            --region ${AWS_REGION}
+                        
+                        echo "✅ Stack is now in stable state!"
+                    """
+                }
+            }
+        }
+        
+        stage('Verify Infrastructure') {
+            steps {
+                echo '🔍 Verifying infrastructure components...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        echo "======================================"
+                        echo "Checking EKS Cluster..."
+                        echo "======================================"
+                        
+                        # Verify EKS cluster
+                        CLUSTER_STATUS=$(aws eks describe-cluster \
+                            --name ${CLUSTER_NAME} \
+                            --region ${AWS_REGION} \
+                            --query 'cluster.status' \
+                            --output text)
+                        
+                        echo "EKS Cluster Status: ${CLUSTER_STATUS}"
+                        
+                        if [ "${CLUSTER_STATUS}" != "ACTIVE" ]; then
+                            echo "❌ EKS Cluster is not ACTIVE"
+                            exit 1
+                        fi
+                        
+                        echo "======================================"
+                        echo "Checking ECR Repository..."
+                        echo "======================================"
+                        
+                        # Verify ECR repository
+                        ECR_URI=$(aws ecr describe-repositories \
+                            --repository-names ${ECR_REPOSITORY} \
+                            --region ${AWS_REGION} \
+                            --query 'repositories[0].repositoryUri' \
+                            --output text)
+                        
+                        echo "ECR Repository URI: ${ECR_URI}"
+                        
+                        if [ -z "${ECR_URI}" ]; then
+                            echo "❌ ECR Repository not found"
+                            exit 1
+                        fi
+                        
+                        echo "======================================"
+                        echo "Checking Node Group..."
+                        echo "======================================"
+                        
+                        # Verify node group
+                        NODE_GROUP_STATUS=$(aws eks describe-nodegroup \
+                            --cluster-name ${CLUSTER_NAME} \
+                            --nodegroup-name ${CLUSTER_NAME}-nodegroup \
+                            --region ${AWS_REGION} \
+                            --query 'nodegroup.status' \
+                            --output text)
+                        
+                        echo "Node Group Status: ${NODE_GROUP_STATUS}"
+                        
+                        if [ "${NODE_GROUP_STATUS}" != "ACTIVE" ]; then
+                            echo "⚠️  Node Group is not yet ACTIVE: ${NODE_GROUP_STATUS}"
+                            echo "This is normal if the stack was just created."
+                        fi
+                        
+                        echo "✅ Infrastructure verification complete!"
+                    '''
+                }
+            }
+        }
+        
+        stage('Display Stack Outputs') {
+            steps {
+                echo '📊 Retrieving stack outputs...'
+                script {
+                    sh '''
+                        set -e
+                        
+                        echo ""
+                        echo "======================================"
+                        echo "📋 STACK OUTPUTS"
+                        echo "======================================"
+                        
+                        # Get stack outputs
+                        aws cloudformation describe-stacks \
+                            --stack-name ${STACK_NAME} \
+                            --region ${AWS_REGION} \
+                            --query 'Stacks[0].Outputs[*].[OutputKey,OutputValue]' \
+                            --output table
+                        
+                        echo ""
+                        echo "======================================"
+                        echo "✅ Infrastructure provisioning complete!"
+                        echo "======================================"
+                        echo ""
+                        echo "Next steps:"
+                        echo "1. Update your Jenkins environment variables:"
+                        echo "   - EKS_CLUSTER_NAME=${CLUSTER_NAME}"
+                        echo "   - ECR_REGISTRY=<account-id>.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        echo "   - ECR_REPOSITORY=${ECR_REPOSITORY}"
+                        echo ""
+                        echo "2. Run the deployment pipeline (Jenkinsfile.deploy)"
+                        echo ""
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo '✅ Infrastructure provisioning completed successfully! 🎉'
+            echo '📊 Check the "Display Stack Outputs" stage for details.'
+        }
+        
+        failure {
+            echo '❌ Infrastructure provisioning failed!'
+            echo '🔍 Check the console output above for error details.'
+            script {
+                sh '''
+                    echo ""
+                    echo "======================================"
+                    echo "❌ CREATE_FAILED Events:"
+                    echo "======================================"
+                    aws cloudformation describe-stack-events \
+                        --stack-name ${STACK_NAME} \
+                        --region ${AWS_REGION} \
+                        --query "StackEvents[?ResourceStatus=='CREATE_FAILED']|[0:5].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+                        --output table || echo "No CREATE_FAILED events found"
+                    
+                    echo ""
+                    echo "======================================"
+                    echo "📋 All Recent Events (last 20):"
+                    echo "======================================"
+                    aws cloudformation describe-stack-events \
+                        --stack-name ${STACK_NAME} \
+                        --region ${AWS_REGION} \
+                        --max-items 20 \
+                        --query 'StackEvents[*].[Timestamp,ResourceStatus,LogicalResourceId,ResourceStatusReason]' \
+                        --output table || true
+                ''' 
+            }
+        }
+        
+        always {
+            echo '💡 Infrastructure provisioning pipeline finished.'
+        }
+    }
+}
