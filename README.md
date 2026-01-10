@@ -35,11 +35,6 @@ LLMOPs/
 └── README.md
 ```
 
-## Contributing
-Contributions are welcome. Please open an issue or submit a pull request.
-
-## License
-MIT
 
 ## Contact
 For questions, reach out to the project maintainers.
