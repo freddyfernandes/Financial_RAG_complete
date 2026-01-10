@@ -7,7 +7,7 @@ pipeline {
 
   triggers {
     // Every 30 minutes
-    cron('H * * * *')
+    cron('* * * * *')
   }
 
   environment {
