@@ -1,30 +1,84 @@
+/* ==========================
+   MultiDocChat — Dark Glass UI
+   Complete styles.css
+   ========================== */
+
 :root {
   --bg1: #0b1020;
   --bg2: #0d1833;
+
+  --text: #f5f7ff;
+  --text-dim: rgba(245, 247, 255, 0.78);
+  --muted: rgba(245, 247, 255, 0.62);
+
   --glass: rgba(255, 255, 255, 0.06);
   --glass2: rgba(255, 255, 255, 0.10);
-  --border: rgba(255, 255, 255, 0.10);
+  --border: rgba(255, 255, 255, 0.12);
+
+  --accent1: #7c5cff;
+  --accent2: #00d1ff;
+
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  --radius-lg: 18px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+
+  --focus: 0 0 0 3px rgba(0, 209, 255, 0.25);
 }
 
+/* Reset / base */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  color: var(--text);
+  background: linear-gradient(180deg, var(--bg1), var(--bg2));
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.45;
+}
+
+a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+a:hover { opacity: 0.92; }
+
+img { max-width: 100%; display: block; }
+
+::selection {
+  background: rgba(124, 92, 255, 0.35);
+  color: #fff;
+}
+
+/* Scrollbar (WebKit) */
+*::-webkit-scrollbar { height: 10px; width: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+}
+*::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); }
+
+/* App background */
 .app-bg {
   min-height: 100vh;
   background:
     radial-gradient(1200px 700px at 20% 10%, rgba(98, 95, 255, 0.25), transparent 60%),
     radial-gradient(900px 600px at 80% 20%, rgba(0, 209, 255, 0.18), transparent 55%),
     linear-gradient(180deg, var(--bg1), var(--bg2));
-  color: #f5f7ff;
+  color: var(--text);
 }
 
+/* Generic glass card */
 .glass {
   background: var(--glass);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
   backdrop-filter: blur(10px);
 }
 
+/* Navbar */
 .navbar {
-  background: rgba(0, 0, 0, 0.20);
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
 }
 
@@ -33,26 +87,107 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #7c5cff, #00d1ff);
+  background: linear-gradient(90deg, var(--accent1), var(--accent2));
   box-shadow: 0 0 22px rgba(0, 209, 255, 0.55);
 }
 
+.brand-title {
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+
+.subtle {
+  color: var(--text-dim);
+}
+
+/* Buttons */
+.btn,
+button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.btn:hover,
+button:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.btn:active,
+button:active {
+  transform: translateY(0);
+}
+
+.btn:focus,
+button:focus {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.btn.primary {
+  background: linear-gradient(90deg, rgba(124, 92, 255, 0.28), rgba(0, 209, 255, 0.18));
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.btn.primary:hover {
+  background: linear-gradient(90deg, rgba(124, 92, 255, 0.36), rgba(0, 209, 255, 0.22));
+}
+
+/* Inputs */
+input, textarea, select {
+  width: 100%;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  padding: 10px 12px;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: rgba(0, 209, 255, 0.45);
+  box-shadow: var(--focus);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(245, 247, 255, 0.60);
+  opacity: 1;
+}
+
+/* Dropzone */
 .dropzone {
   display: block;
   cursor: pointer;
   padding: 18px;
-  border-radius: 16px;
-  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-md);
+  border: 1px dashed rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.04);
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .dropzone:hover {
   transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
+.dropzone:focus-within {
+  box-shadow: var(--focus);
+  border-color: rgba(0, 209, 255, 0.45);
+}
+
+/* Upload icon */
 .upload-icon {
   width: 44px;
   height: 44px;
@@ -60,55 +195,84 @@
   place-items: center;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-}
-
-.session-pill {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e9ecff;
 }
 
+/* Session pill */
+.session-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e9ecff;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* Chat layout helpers */
 .chat-messages {
   flex: 1;
   overflow: auto;
+  padding-right: 4px;
 }
 
 .chat-hint {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
   padding: 14px 16px;
   border-radius: 14px;
-  color: rgba(245, 247, 255, 0.75);
+  color: var(--text-dim);
 }
 
+/* Message bubbles */
 .msg {
   max-width: min(680px, 92%);
   padding: 12px 14px;
   border-radius: 16px;
   margin-bottom: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .msg.user {
   margin-left: auto;
-  background: rgba(124, 92, 255, 0.18);
+  background: rgba(124, 92, 255, 0.20);
+  border-color: rgba(124, 92, 255, 0.26);
 }
 
 .msg.bot {
   margin-right: auto;
-  background: rgba(0, 209, 255, 0.10);
+  background: rgba(0, 209, 255, 0.12);
+  border-color: rgba(0, 209, 255, 0.22);
+}
+
+.msg strong { color: #fff; }
+.msg code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* For multi-line code blocks inside messages if you use <pre> */
+.msg pre {
+  margin: 10px 0 0;
+  padding: 12px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  overflow: auto;
 }
 
 .msg-meta {
   font-size: 12px;
-  opacity: 0.7;
+  color: var(--muted);
   margin-top: 6px;
 }
 
+/* Typing dots */
 .typing {
   display: inline-flex;
   gap: 6px;
@@ -119,7 +283,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: rgba(245, 247, 255, 0.8);
+  background: rgba(245, 247, 255, 0.85);
   animation: bounce 900ms infinite ease-in-out;
 }
 
@@ -129,4 +293,39 @@
 @keyframes bounce {
   0%, 80%, 100% { transform: translateY(0); opacity: .6; }
   40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* Small helpers (optional, but nice) */
+hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  margin: 16px 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+/* Responsive tweaks */
+@media (max-width: 640px) {
+  .msg { max-width: 96%; }
+  .dropzone { padding: 14px; }
+  input, textarea, select { border-radius: 12px; }
 }
