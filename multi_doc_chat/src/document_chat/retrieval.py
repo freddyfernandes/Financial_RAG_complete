@@ -203,114 +203,46 @@ class ChatIngestor:
 # ----------------------------
 class RAGPipeline:
     """
-    Minimal conversational RAG wrapper that:
-      - loads a FAISS index from disk
-      - creates a retriever (supports MMR)
-      - invokes an LLM via ModelLoader
+    Minimal RAG pipeline wrapper.
+    Your main.py expects:
+      - RAGPipeline(session_id=...)
+      - load_retriever_from_faiss(index_path, ...)
+      - invoke(message, chat_history)
     """
-
-    def __init__(self, session_id: str, model_loader: Optional[ModelLoader] = None):
+    def __init__(self, session_id: str):
         self.session_id = session_id
-        self.model_loader = model_loader or ModelLoader()
-        self.emb = self.model_loader.load_embeddings()
-        self.vectorstore: Optional[FAISS] = None
+        self.model_loader = ModelLoader()
         self.retriever = None
 
     def load_retriever_from_faiss(
         self,
         *,
         index_path: str,
-        search_type: str = "mmr",
         k: int = 5,
+        search_type: str = "mmr",
         fetch_k: int = 20,
         lambda_mult: float = 0.5,
     ):
-        """
-        index_path example: faiss_index/<session_id>
-        """
-        idx = Path(index_path)
-
-        if not (idx / "index.faiss").exists():
-            raise DocumentPortalException(f"FAISS index not found at: {idx}", sys)
-
-        self.vectorstore = FAISS.load_local(
-            str(idx),
-            embeddings=self.emb,
-            allow_dangerous_deserialization=True,
-        )
-
+        fm = FaissManager(Path(index_path), self.model_loader)
+        vs = fm.load_or_create()  # loads existing FAISS
         search_kwargs = {"k": k}
         if search_type == "mmr":
             search_kwargs["fetch_k"] = fetch_k
             search_kwargs["lambda_mult"] = lambda_mult
-
-        self.retriever = self.vectorstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+        self.retriever = vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
         return self.retriever
 
-    def _load_llm(self):
-        # Your project likely has this; keep it flexible.
-        if hasattr(self.model_loader, "load_llm") and callable(getattr(self.model_loader, "load_llm")):
-            return self.model_loader.load_llm()
-
-        # fallback: try a more generic method name if you used one
-        for name in ("load_chat_model", "get_llm", "get_chat_model"):
-            if hasattr(self.model_loader, name) and callable(getattr(self.model_loader, name)):
-                return getattr(self.model_loader, name)()
-
-        raise DocumentPortalException(
-            "ModelLoader does not expose a load_llm()/load_chat_model() method. "
-            "Add one, or adjust RAGPipeline._load_llm() to match your ModelLoader.",
-            sys,
-        )
-
-    def invoke(self, question: str, chat_history: Optional[List[Any]] = None) -> str:
-        """
-        chat_history: list of LangChain messages (HumanMessage/AIMessage) or anything your prompt builder can ignore.
-        """
+    def invoke(self, message: str, *, chat_history=None) -> str:
         if self.retriever is None:
-            raise DocumentPortalException("Retriever not loaded. Call load_retriever_from_faiss() first.", sys)
+            raise DocumentPortalException("Retriever not initialized. Call load_retriever_from_faiss() first.", sys)
 
-        # 1) retrieve context
-        docs: List[Document] = self.retriever.get_relevant_documents(question)
-        context = "\n\n".join(
-            f"[{i+1}] {d.page_content}\nSOURCE={d.metadata.get('source') or d.metadata.get('file_path') or 'unknown'}"
-            for i, d in enumerate(docs[:8])
-        )
+        # Basic retrieval-only answer (replace with your LLM chain if you have one)
+        docs = self.retriever.get_relevant_documents(message)
+        context = "\n\n".join(d.page_content for d in docs[:4])
+        return f"Retrieved context:\n\n{context}"
 
-        # 2) build prompt + call LLM
-        llm = self._load_llm()
-
-        # Prefer LangChain prompt piping if available
-        try:
-            from langchain_core.output_parsers import StrOutputParser
-            from langchain_core.prompts import ChatPromptTemplate
-
-            history_text = ""
-            if chat_history:
-                # keep it simple & robust
-                history_text = "\n".join([getattr(m, "content", str(m)) for m in chat_history[-8:]])
-
-            prompt = ChatPromptTemplate.from_messages(
-                [
-                    ("system", "You are a helpful assistant. Use the provided context to answer. If missing, say you don't know."),
-                    ("human", "CONTEXT:\n{context}\n\nCHAT HISTORY:\n{history}\n\nQUESTION:\n{question}"),
-                ]
-            )
-
-            chain = prompt | llm | StrOutputParser()
-            return chain.invoke({"context": context, "history": history_text, "question": question})
-        except Exception:
-            # Fallback if llm isn't a LangChain runnable
-            prompt_text = (
-                "You are a helpful assistant. Use the provided context to answer. If missing, say you don't know.\n\n"
-                f"CONTEXT:\n{context}\n\nQUESTION:\n{question}\n"
-            )
-            if hasattr(llm, "invoke"):
-                out = llm.invoke(prompt_text)
-                return out.content if hasattr(out, "content") else str(out)
-            if callable(llm):
-                return str(llm(prompt_text))
-            return str(llm)
+# Backwards compatible name expected by tests
+ConversationalRAG = RAGPipeline
 
 
 __all__ = [
