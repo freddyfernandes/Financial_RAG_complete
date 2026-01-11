@@ -1,5 +1,7 @@
 python-dotenv==1.1.1
 structlog
+pypdf
+
 
 langchain==0.3.27
 langchain-community==0.3.27

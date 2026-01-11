@@ -1,147 +1,150 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MultiDocChat</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-  <style>
-    /* Minimal inline tweaks; most styles live in styles.css */
-  </style>
-  <script>
-    const $ = (sel) => document.querySelector(sel);
-    let sessionId = localStorage.getItem('mdc_session_id') || '';
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MultiDocChat</title>
 
-    async function uploadFiles(evt) {
-      evt.preventDefault();
-      const input = $('#file-input');
-      const files = input.files;
-      if (!files || files.length === 0) {
-        toast('Please choose at least one file');
-        return;
-      }
-      toggleIndexing(true);
-      try {
-        const fd = new FormData();
-        for (const f of files) fd.append('files', f);
-        const res = await fetch('/upload', { method: 'POST', body: fd });
-        if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
-        const data = await res.json();
-        sessionId = data.session_id;
-        localStorage.setItem('mdc_session_id', sessionId);
-        $('#chat').style.display = 'block';
-        toast('Indexing complete. You can chat now.');
-      } catch (e) {
-        console.error(e);
-        toast('Indexing failed. Try re-uploading.');
-      } finally {
-        toggleIndexing(false);
-      }
-    }
+    <!-- Bootstrap (CDN) -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      crossorigin="anonymous"
+    />
+    <!-- Your custom styles -->
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
 
-    async function sendMessage() {
-      const input = $('#message-input');
-      const text = input.value.trim();
-      if (!sessionId) { toast('Please upload documents first.'); return; }
-      if (!text) { return; }
-      appendMessage('user', text);
-      input.value = '';
-      toggleThinking(true);
-      try {
-        const res = await fetch('/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, message: text })
-        });
-        if (!res.ok) throw new Error((await res.json()).detail || 'Chat failed');
-        const data = await res.json();
-        appendMessage('assistant', data.answer);
-      } catch (e) {
-        console.error(e);
-        toast('Thinking failed. Try again.');
-      } finally {
-        toggleThinking(false);
-      }
-    }
+  <body class="app-bg">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top border-bottom border-white border-opacity-10">
+      <div class="container py-2">
+        <a class="navbar-brand fw-semibold" href="/">
+          <span class="brand-dot me-2"></span>MultiDocChat
+        </a>
 
-    function appendMessage(role, text) {
-      const container = $('#messages');
-      const bubble = document.createElement('div');
-      bubble.className = 'bubble ' + (role === 'user' ? 'user' : 'assistant');
-      bubble.textContent = text;
-      container.appendChild(bubble);
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function toggleIndexing(on) {
-      $('#upload-btn').disabled = on;
-      $('#indexing').style.display = on ? 'inline-block' : 'none';
-    }
-
-    function toggleThinking(on) {
-      $('#send-btn').disabled = on;
-      $('#thinking').style.display = on ? 'inline-block' : 'none';
-    }
-
-    function toast(msg) {
-      const el = $('#toast');
-      el.textContent = msg;
-      el.style.opacity = '1';
-      setTimeout(() => el.style.opacity = '0', 2500);
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-      if (sessionId) {
-        $('#chat').style.display = 'block';
-      }
-      $('#upload-form').addEventListener('submit', uploadFiles);
-      $('#send-btn').addEventListener('click', sendMessage);
-      $('#message-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-      });
-      const drop = $('#dropzone');
-      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('hover'); });
-      drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
-      drop.addEventListener('drop', (e) => {
-        e.preventDefault();
-        drop.classList.remove('hover');
-        $('#file-input').files = e.dataTransfer.files;
-      });
-    });
-  </script>
-  <meta name="color-scheme" content="light dark" />
-</head>
-<body>
-  <header>
-    <h1>MultiDocChat</h1>
-  </header>
-
-  <main>
-    <section id="uploader">
-      <form id="upload-form">
-        <div id="dropzone">
-          <p>Drag and drop files here</p>
-          <p>or</p>
-          <label class="btn">
-            Choose files
-            <input id="file-input" type="file" name="files" multiple hidden />
-          </label>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <span class="badge text-bg-dark border border-white border-opacity-10">
+            EKS Live
+          </span>
+          <a class="btn btn-sm btn-outline-light" href="/docs" target="_blank" rel="noreferrer">
+            API Docs
+          </a>
         </div>
-        <button id="upload-btn" style="background-color: rgb(0, 94, 225); color: white; border-radius: 6px; cursor: pointer;" type="submit">Upload & Index</button>
-        <span id="indexing" class="hint" style="display:none;">Indexing…</span>
-      </form>
-    </section>
-
-    <section id="chat" style="display:none;">
-      <div id="messages" class="messages"></div>
-      <div class="composer">
-        <textarea id="message-input" rows="2" placeholder="Ask about your documents…"></textarea>
-        <button id="send-btn" style="background-color: rgb(0, 94, 225); color: white; border-radius: 6px; cursor: pointer;">Send</button>
-        <span id="thinking" class="hint" style="display:none;">Thinking…</span>
       </div>
-    </section>
-  </main>
+    </nav>
 
-  <div id="toast" class="toast"></div>
-</body>
+    <main class="container my-4">
+      <div class="row g-4">
+        <!-- Left: Upload / Index -->
+        <div class="col-12 col-lg-4">
+          <div class="card glass">
+            <div class="card-body p-4">
+              <h5 class="card-title mb-1">Upload documents</h5>
+              <p class="text-secondary mb-4">
+                Upload PDFs/DOCX/TXT, build the index, then chat with your files.
+              </p>
+
+              <div id="alertBox" class="alert d-none" role="alert"></div>
+
+              <label class="dropzone mb-3" for="fileInput">
+                <div class="d-flex flex-column align-items-center text-center gap-2">
+                  <div class="upload-icon">⬆️</div>
+                  <div class="fw-semibold">Drag & drop files here</div>
+                  <div class="text-secondary small">or click to browse</div>
+                </div>
+                <input id="fileInput" type="file" multiple class="d-none" />
+              </label>
+
+              <div class="d-flex gap-2">
+                <button id="uploadBtn" class="btn btn-primary w-100">
+                  Upload & Index
+                </button>
+                <button id="resetBtn" class="btn btn-outline-light">
+                  Reset
+                </button>
+              </div>
+
+              <div class="mt-3 small text-secondary">
+                <div class="d-flex align-items-center justify-content-between gap-2">
+                  <span>Session</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <code id="sessionId" class="session-pill">—</code>
+                    <button id="copySessionBtn" class="btn btn-sm btn-outline-light" disabled>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div id="uploadStatus" class="mt-2 small"></div>
+              </div>
+
+              <hr class="border-white border-opacity-10 my-4" />
+
+              <div class="text-secondary small">
+                <div class="fw-semibold text-light mb-1">Tips</div>
+                <ul class="mb-0">
+                  <li>Upload first (creates a session_id)</li>
+                  <li>Then ask questions in the chat</li>
+                  <li>If EKS restarts pods, you may need to re-upload</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Chat -->
+        <div class="col-12 col-lg-8">
+          <div class="card glass h-100">
+            <div class="card-body p-0 d-flex flex-column" style="min-height: 70vh;">
+              <div class="p-4 border-bottom border-white border-opacity-10">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <h5 class="mb-1">Chat</h5>
+                    <div class="text-secondary small">
+                      Ask questions about the uploaded documents.
+                    </div>
+                  </div>
+                  <span id="chatReadyBadge" class="badge rounded-pill text-bg-secondary">
+                    Upload to start
+                  </span>
+                </div>
+              </div>
+
+              <div id="chatMessages" class="chat-messages p-4">
+                <div class="chat-hint">
+                  Upload documents to create an index, then ask a question here.
+                </div>
+              </div>
+
+              <div class="p-3 border-top border-white border-opacity-10">
+                <form id="chatForm" class="d-flex gap-2">
+                  <input
+                    id="chatInput"
+                    class="form-control form-control-lg"
+                    placeholder="Type your question…"
+                    autocomplete="off"
+                    disabled
+                  />
+                  <button id="sendBtn" class="btn btn-primary btn-lg" type="submit" disabled>
+                    Send
+                  </button>
+                </form>
+                <div class="text-secondary small mt-2">
+                  Endpoint: <code>/chat</code> (uses your current <code>session_id</code>)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bootstrap JS bundle -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+      crossorigin="anonymous"
+    ></script>
+
+    <!-- App logic -->
+    <script src="/static/app.js"></script>
+  </body>
 </html>
