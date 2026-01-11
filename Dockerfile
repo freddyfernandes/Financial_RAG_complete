@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y build-essential poppler-utils curl && r
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 ENV UV_LINK_MODE=copy
-ENV PYTHONPATH="/app:/app/multi_doc_chat"
+ENV PYTHONPATH="/app"
 
 # Copy dependency manifests for better layer caching
 COPY requirements.txt ./
@@ -31,7 +31,4 @@ COPY . .
 EXPOSE 8080
 
 # Run FastAPI with uvicorn
-#CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
-
-# Replace last CMD in prod
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

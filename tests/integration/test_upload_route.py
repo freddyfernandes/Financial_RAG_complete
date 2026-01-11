@@ -32,3 +32,5 @@ def test_upload_ingestor_failure_returns_500(client, clear_sessions, monkeypatch
     resp = client.post("/upload", files=files)
     assert resp.status_code == 500
     assert "boom" in resp.json()["detail"].lower()
+
+
