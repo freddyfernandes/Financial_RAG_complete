@@ -1,20 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -----------------------------
-# MSYS/Git-Bash on Windows fix:
-# prevents '/var/jenkins_home' -> 'C:\var\jenkins_home' conversion
-# (colon ':' breaks ACI mount paths)
-# -----------------------------
 export MSYS_NO_PATHCONV=1
 export MSYS2_ARG_CONV_EXCL="*"
 
-# -----------------------------
-# Configuration (EDIT THESE)
-# -----------------------------
-# Optional: set from PowerShell/GitBash before running:
-#   export AZ_SUBSCRIPTION="Azure for Students"
-#   export AZ_SUBSCRIPTION="78436bb7-5e74-4b30-bc93-23322eb1edaf"
+
 AZ_SUBSCRIPTION="${AZ_SUBSCRIPTION:-}"
 
 RESOURCE_GROUP="llmops-jenkins-rg-eu"
