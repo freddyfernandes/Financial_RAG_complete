@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from multi_doc_chat.src.document_ingestion.data_ingestion import ChatIngestor
-from multi_doc_chat.src.document_chat.retrieval import ConversationalRAG
+from multi_doc_chat.src.document_chat.retrieval import RAGPipeline as ConversationalRAG
 from langchain_core.messages import HumanMessage, AIMessage
 from multi_doc_chat.exception.custom_exception import DocumentPortalException
 
