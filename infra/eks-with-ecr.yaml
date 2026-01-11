@@ -9,12 +9,13 @@ Parameters:
 
   NodeInstanceType:
     Type: String
-    Default: t3.medium
+    Default: t3.small
     Description: EC2 instance type for EKS worker nodes
     AllowedValues:
+      - t3.micro
       - t3.small
-      - t3.medium
-      - t3.large
+      - t4g.micro
+      - t4g.small
 
   DesiredCapacity:
     Type: Number
