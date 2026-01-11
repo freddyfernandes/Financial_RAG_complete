@@ -8,7 +8,7 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = "${env.AWS_SECRET_ACCESS_KEY}"
         
         // EKS Configuration
-        EKS_CLUSTER_NAME = "${env.EKS_CLUSTER_NAME ?: 'llmops-live-cluste-new'}"
+        EKS_CLUSTER_NAME = "${env.EKS_CLUSTER_NAME ?: 'llmops-live-cluster-new'}"
         
         // ECR Configuration
         ECR_REGISTRY = "${env.ECR_REGISTRY}"  // Format: account-id.dkr.ecr.region.amazonaws.com
