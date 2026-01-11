@@ -1,19 +1,16 @@
-/* ==========================
-   MultiDocChat — Dark Glass UI
-   Complete styles.css
-   ========================== */
-
 :root {
   --bg1: #0b1020;
   --bg2: #0d1833;
 
-  --text: #f5f7ff;
-  --text-dim: rgba(245, 247, 255, 0.78);
-  --muted: rgba(245, 247, 255, 0.62);
+  /* ✅ Make all text “whiter” / higher contrast */
+  --text: rgba(255, 255, 255, 0.96);
+  --text-dim: rgba(255, 255, 255, 0.88);
+  --muted: rgba(255, 255, 255, 0.74);
 
-  --glass: rgba(255, 255, 255, 0.06);
-  --glass2: rgba(255, 255, 255, 0.10);
-  --border: rgba(255, 255, 255, 0.12);
+  /* ✅ Slightly stronger glass so white text reads better */
+  --glass: rgba(255, 255, 255, 0.08);
+  --glass2: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.14);
 
   --accent1: #7c5cff;
   --accent2: #00d1ff;
@@ -23,34 +20,43 @@
   --radius-md: 16px;
   --radius-sm: 12px;
 
-  --focus: 0 0 0 3px rgba(0, 209, 255, 0.25);
+  --focus: 0 0 0 3px rgba(0, 209, 255, 0.28);
+
+  /* ✅ Subtle glow improves readability on gradients */
+  --text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
 }
 
 /* Reset / base */
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+
 body {
   margin: 0;
   color: var(--text);
   background: linear-gradient(180deg, var(--bg1), var(--bg2));
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   line-height: 1.45;
+  text-rendering: optimizeLegibility;
 }
 
-a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+a {
+  color: rgba(255, 255, 255, 0.95);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 a:hover { opacity: 0.92; }
 
 img { max-width: 100%; display: block; }
 
 ::selection {
-  background: rgba(124, 92, 255, 0.35);
+  background: rgba(124, 92, 255, 0.40);
   color: #fff;
 }
 
 /* Scrollbar (WebKit) */
 *::-webkit-scrollbar { height: 10px; width: 10px; }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.18);
   border-radius: 999px;
   border: 2px solid rgba(0, 0, 0, 0.15);
 }
@@ -66,6 +72,12 @@ img { max-width: 100%; display: block; }
   color: var(--text);
 }
 
+/* Global readability helpers */
+p, span, li, div, label, small, h1, h2, h3, h4, h5, h6 {
+  color: inherit;
+  text-shadow: var(--text-shadow);
+}
+
 /* Generic glass card */
 .glass {
   background: var(--glass);
@@ -77,8 +89,8 @@ img { max-width: 100%; display: block; }
 
 /* Navbar */
 .navbar {
-  background: rgba(0, 0, 0, 0.22);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.24);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   backdrop-filter: blur(12px);
 }
 
@@ -92,7 +104,7 @@ img { max-width: 100%; display: block; }
 }
 
 .brand-title {
-  color: var(--text);
+  color: rgba(255, 255, 255, 0.98);
   letter-spacing: 0.2px;
 }
 
@@ -104,33 +116,31 @@ img { max-width: 100%; display: block; }
 .btn,
 button {
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.96);
   border-radius: 14px;
   padding: 10px 14px;
   cursor: pointer;
   transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  text-shadow: var(--text-shadow);
 }
 
 .btn:hover,
 button:hover {
-  background: rgba(255, 255, 255, 0.11);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.24);
   transform: translateY(-1px);
 }
 
 .btn:active,
-button:active {
-  transform: translateY(0);
-}
+button:active { transform: translateY(0); }
 
 .btn:focus,
 button:focus {
   outline: none;
   box-shadow: var(--focus);
 }
-
 .btn.primary {
   background: linear-gradient(90deg, rgba(124, 92, 255, 0.28), rgba(0, 209, 255, 0.18));
   border-color: rgba(255, 255, 255, 0.18);
