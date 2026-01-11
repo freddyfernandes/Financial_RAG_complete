@@ -19,7 +19,7 @@ from multi_doc_chat.exception.custom_exception import DocumentPortalException
 # ----------------------------
 # FastAPI initialization
 # ----------------------------
-app = FastAPI(title="Financialdoc_Chat", version="0.1.0")
+app = FastAPI(title="MultiDocChat", version="0.1.0")
 
 # CORS (optional for local dev)
 app.add_middleware(
@@ -65,7 +65,7 @@ class UploadResponse(BaseModel):
     session_id: str
     indexed: bool
     message: str | None = None
- 
+
 
 class ChatRequest(BaseModel):
     session_id: str

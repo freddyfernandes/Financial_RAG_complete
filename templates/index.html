@@ -5,362 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MultiDocChat</title>
   <link rel="stylesheet" href="/static/styles.css" />
-  <meta name="color-scheme" content="light dark" />
-
   <style>
-    :root{
-      --bg: #0b1020;
-      --panel: rgba(255,255,255,.06);
-      --panel2: rgba(255,255,255,.10);
-      --border: rgba(255,255,255,.10);
-      --text: rgba(255,255,255,.92);
-      --muted: rgba(255,255,255,.65);
-      --brand: #0a64ff;
-      --brand2: #00d3a7;
-      --danger: #ff4d4f;
-      --shadow: 0 18px 60px rgba(0,0,0,.35);
-      --radius: 18px;
-      --radius2: 12px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-    }
-
-    /* Light mode fallback */
-    @media (prefers-color-scheme: light) {
-      :root{
-        --bg: #f6f7fb;
-        --panel: rgba(0,0,0,.04);
-        --panel2: rgba(0,0,0,.07);
-        --border: rgba(0,0,0,.10);
-        --text: rgba(0,0,0,.90);
-        --muted: rgba(0,0,0,.55);
-        --shadow: 0 18px 60px rgba(0,0,0,.12);
-      }
-    }
-
-    html,body { height:100%; }
-    body{
-      margin:0;
-      font-family: var(--sans);
-      color: var(--text);
-      background:
-        radial-gradient(1200px 800px at 15% 10%, rgba(10,100,255,.25), transparent 55%),
-        radial-gradient(900px 600px at 90% 30%, rgba(0,211,167,.20), transparent 55%),
-        radial-gradient(900px 600px at 40% 95%, rgba(255,77,79,.10), transparent 60%),
-        var(--bg);
-    }
-
-    /* Layout */
-    .wrap{
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 22px 18px 28px;
-      display: grid;
-      gap: 16px;
-      grid-template-rows: auto 1fr;
-      min-height: 100%;
-    }
-
-    .topbar{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding: 14px 16px;
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, var(--panel), transparent);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-    }
-
-    .brand{
-      display:flex;
-      align-items:center;
-      gap:12px;
-      min-width: 0;
-    }
-
-    .logo{
-      width: 40px;
-      height: 40px;
-      border-radius: 14px;
-      background:
-        radial-gradient(circle at 30% 30%, rgba(255,255,255,.45), transparent 45%),
-        linear-gradient(135deg, var(--brand), var(--brand2));
-      box-shadow: 0 10px 30px rgba(10,100,255,.25);
-      flex:0 0 auto;
-    }
-
-    .brand h1{
-      font-size: 18px;
-      line-height: 1.1;
-      margin:0;
-      letter-spacing: .2px;
-      white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
-    }
-    .subtitle{
-      font-size: 12px;
-      margin-top: 2px;
-      color: var(--muted);
-    }
-
-    .status{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      flex-wrap: wrap;
-      justify-content:flex-end;
-    }
-    .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .dot{
-      width: 9px; height: 9px; border-radius: 99px;
-      background: rgba(255,255,255,.35);
-      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
-    }
-    .dot.on{ background: var(--brand2); box-shadow: 0 0 0 4px rgba(0,211,167,.15); }
-    .mono{ font-family: var(--mono); font-size: 11px; color: var(--muted); }
-
-    .btn{
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, var(--panel2), var(--panel));
-      color: var(--text);
-      border-radius: 12px;
-      padding: 10px 12px;
-      cursor: pointer;
-      font-weight: 600;
-      transition: transform .08s ease, opacity .15s ease, border-color .15s ease;
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      user-select:none;
-    }
-    .btn:hover{ border-color: rgba(255,255,255,.18); }
-    .btn:active{ transform: translateY(1px); }
-    .btn.primary{
-      border-color: rgba(10,100,255,.45);
-      background: linear-gradient(180deg, rgba(10,100,255,.95), rgba(10,100,255,.75));
-      color: #fff;
-      box-shadow: 0 18px 50px rgba(10,100,255,.28);
-    }
-    .btn.danger{
-      border-color: rgba(255,77,79,.35);
-      background: linear-gradient(180deg, rgba(255,77,79,.22), rgba(255,77,79,.10));
-      color: var(--text);
-    }
-    .btn:disabled{ opacity: .55; cursor:not-allowed; transform:none; }
-
-    /* Main grid */
-    .grid{
-      display:grid;
-      grid-template-columns: 380px 1fr;
-      gap: 16px;
-      align-items: start;
-    }
-    @media (max-width: 940px){
-      .grid{ grid-template-columns: 1fr; }
-    }
-
-    .card{
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, var(--panel), transparent);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-      overflow:hidden;
-    }
-
-    .card-header{
-      padding: 14px 16px 10px;
-      border-bottom: 1px solid var(--border);
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap: 12px;
-    }
-    .card-title{
-      margin:0;
-      font-size: 14px;
-      letter-spacing: .2px;
-    }
-    .card-desc{
-      margin: 6px 0 0;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.35;
-    }
-    .card-body{ padding: 14px 16px 16px; }
-
-    /* Dropzone */
-    #dropzone{
-      border: 1px dashed rgba(255,255,255,.22);
-      border-radius: 16px;
-      padding: 16px;
-      background: rgba(255,255,255,.03);
-      transition: border-color .15s ease, background .15s ease, transform .15s ease;
-      text-align:center;
-    }
-    #dropzone.hover{
-      border-color: rgba(0,211,167,.70);
-      background: rgba(0,211,167,.08);
-      transform: translateY(-1px);
-    }
-    .dz-title{ font-weight: 700; margin: 0 0 6px; }
-    .dz-sub{ margin: 0; color: var(--muted); font-size: 12px; }
-    .dz-row{
-      margin-top: 12px;
-      display:flex;
-      gap: 10px;
-      justify-content:center;
-      flex-wrap: wrap;
-    }
-
-    .small{
-      font-size: 12px; color: var(--muted);
-      margin-top: 10px;
-      display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
-    }
-
-    /* Chat */
-    #chat{ display:block; }
-    .messages{
-      height: 520px;
-      overflow:auto;
-      padding: 16px;
-      display:flex;
-      flex-direction:column;
-      gap: 12px;
-      scroll-behavior:smooth;
-    }
-    @media (max-width: 940px){ .messages{ height: 430px; } }
-
-    .bubble{
-      max-width: 85%;
-      padding: 12px 12px;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,.05);
-      line-height: 1.4;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-    .bubble.user{
-      align-self:flex-end;
-      background: linear-gradient(180deg, rgba(10,100,255,.65), rgba(10,100,255,.30));
-      border-color: rgba(10,100,255,.35);
-      color: #fff;
-    }
-    .bubble.assistant{
-      align-self:flex-start;
-      background: rgba(255,255,255,.05);
-    }
-
-    .meta-row{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding: 12px 16px;
-      border-top: 1px solid var(--border);
-      background: rgba(0,0,0,.04);
-    }
-    @media (prefers-color-scheme: light){
-      .meta-row{ background: rgba(0,0,0,.02); }
-    }
-
-    .composer{
-      display:flex;
-      align-items:flex-end;
-      gap: 10px;
-      width:100%;
-    }
-    textarea{
-      width: 100%;
-      resize: none;
-      border-radius: 14px;
-      padding: 11px 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,.04);
-      color: var(--text);
-      outline:none;
-      font-family: var(--sans);
-      line-height:1.35;
-    }
-    textarea:focus{
-      border-color: rgba(0,211,167,.55);
-      box-shadow: 0 0 0 4px rgba(0,211,167,.10);
-    }
-
-    .hint{
-      font-size: 12px;
-      color: var(--muted);
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-    }
-    .spinner{
-      width: 14px; height: 14px;
-      border-radius: 99px;
-      border: 2px solid rgba(255,255,255,.25);
-      border-top-color: rgba(255,255,255,.85);
-      animation: spin .9s linear infinite;
-    }
-    @keyframes spin{ to{ transform: rotate(360deg); } }
-
-    /* Toast */
-    .toast{
-      position: fixed;
-      left: 50%;
-      bottom: 18px;
-      transform: translateX(-50%);
-      padding: 10px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(0,0,0,.45);
-      color: #fff;
-      opacity: 0;
-      transition: opacity .2s ease, transform .2s ease;
-      box-shadow: var(--shadow);
-      max-width: min(560px, calc(100vw - 24px));
-      text-align:center;
-      pointer-events:none;
-      backdrop-filter: blur(10px);
-    }
-    @media (prefers-color-scheme: light){
-      .toast{ background: rgba(0,0,0,.70); }
-    }
+    /* Minimal inline tweaks; most styles live in styles.css */
   </style>
-
   <script>
     const $ = (sel) => document.querySelector(sel);
     let sessionId = localStorage.getItem('mdc_session_id') || '';
-
-    function setSessionPill() {
-      const on = !!sessionId;
-      $('#sess-dot').classList.toggle('on', on);
-      $('#sess-text').textContent = on ? `session: ${sessionId}` : 'no session';
-      $('#chat-card').style.opacity = on ? '1' : '.7';
-      $('#chat-disabled').style.display = on ? 'none' : 'block';
-    }
-
-    function resetSession() {
-      sessionId = '';
-      localStorage.removeItem('mdc_session_id');
-      $('#messages').innerHTML = '';
-      toast('Session cleared. Upload documents to start again.');
-      setSessionPill();
-    }
 
     async function uploadFiles(evt) {
       evt.preventDefault();
@@ -371,22 +21,15 @@
         return;
       }
       toggleIndexing(true);
-
       try {
         const fd = new FormData();
         for (const f of files) fd.append('files', f);
-
         const res = await fetch('/upload', { method: 'POST', body: fd });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload.detail || 'Upload failed');
-
-        sessionId = payload.session_id;
+        if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
+        const data = await res.json();
+        sessionId = data.session_id;
         localStorage.setItem('mdc_session_id', sessionId);
-
-        // show chat
         $('#chat').style.display = 'block';
-        setSessionPill();
-
         toast('Indexing complete. You can chat now.');
       } catch (e) {
         console.error(e);
@@ -401,25 +44,21 @@
       const text = input.value.trim();
       if (!sessionId) { toast('Please upload documents first.'); return; }
       if (!text) { return; }
-
       appendMessage('user', text);
       input.value = '';
       toggleThinking(true);
-
       try {
         const res = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: sessionId, message: text })
         });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload.detail || 'Chat failed');
-
-        appendMessage('assistant', payload.answer ?? '(no answer)');
+        if (!res.ok) throw new Error((await res.json()).detail || 'Chat failed');
+        const data = await res.json();
+        appendMessage('assistant', data.answer);
       } catch (e) {
         console.error(e);
         toast('Thinking failed. Try again.');
-        appendMessage('assistant', '⚠️ Sorry — I could not complete that request. Please retry.');
       } finally {
         toggleThinking(false);
       }
@@ -436,37 +75,30 @@
 
     function toggleIndexing(on) {
       $('#upload-btn').disabled = on;
-      $('#indexing').style.display = on ? 'inline-flex' : 'none';
-      $('#upload-btn').textContent = on ? 'Uploading…' : 'Upload & Index';
+      $('#indexing').style.display = on ? 'inline-block' : 'none';
     }
 
     function toggleThinking(on) {
       $('#send-btn').disabled = on;
-      $('#thinking').style.display = on ? 'inline-flex' : 'none';
+      $('#thinking').style.display = on ? 'inline-block' : 'none';
     }
 
     function toast(msg) {
       const el = $('#toast');
       el.textContent = msg;
       el.style.opacity = '1';
-      el.style.transform = 'translateX(-50%) translateY(-2px)';
-      setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateX(-50%) translateY(0px)';
-      }, 2500);
+      setTimeout(() => el.style.opacity = '0', 2500);
     }
 
     window.addEventListener('DOMContentLoaded', () => {
-      setSessionPill();
-
+      if (sessionId) {
+        $('#chat').style.display = 'block';
+      }
       $('#upload-form').addEventListener('submit', uploadFiles);
       $('#send-btn').addEventListener('click', sendMessage);
-      $('#reset-btn').addEventListener('click', resetSession);
-
       $('#message-input').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
       });
-
       const drop = $('#dropzone');
       drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('hover'); });
       drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
@@ -474,92 +106,41 @@
         e.preventDefault();
         drop.classList.remove('hover');
         $('#file-input').files = e.dataTransfer.files;
-        toast(`${e.dataTransfer.files.length} file(s) ready to upload`);
       });
     });
   </script>
+  <meta name="color-scheme" content="light dark" />
 </head>
-
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div style="min-width:0;">
-          <h1>MultiDocChat</h1>
-          <div class="subtitle">Upload docs → build a vector index → chat with citations-ready answers</div>
+  <header>
+    <h1>MultiDocChat</h1>
+  </header>
+
+  <main>
+    <section id="uploader">
+      <form id="upload-form">
+        <div id="dropzone">
+          <p>Drag and drop files here</p>
+          <p>or</p>
+          <label class="btn">
+            Choose files
+            <input id="file-input" type="file" name="files" multiple hidden />
+          </label>
         </div>
+        <button id="upload-btn" style="background-color: rgb(0, 94, 225); color: white; border-radius: 6px; cursor: pointer;" type="submit">Upload & Index</button>
+        <span id="indexing" class="hint" style="display:none;">Indexing…</span>
+      </form>
+    </section>
+
+    <section id="chat" style="display:none;">
+      <div id="messages" class="messages"></div>
+      <div class="composer">
+        <textarea id="message-input" rows="2" placeholder="Ask about your documents…"></textarea>
+        <button id="send-btn" style="background-color: rgb(0, 94, 225); color: white; border-radius: 6px; cursor: pointer;">Send</button>
+        <span id="thinking" class="hint" style="display:none;">Thinking…</span>
       </div>
-
-      <div class="status">
-        <span class="pill"><span id="sess-dot" class="dot"></span><span id="sess-text" class="mono">no session</span></span>
-        <button id="reset-btn" class="btn danger" type="button" title="Clear local session id and chat">
-          Reset
-        </button>
-      </div>
-    </header>
-
-    <main class="grid">
-      <!-- Upload Card -->
-      <section class="card">
-        <div class="card-header">
-          <div>
-            <p class="card-title">1) Upload documents</p>
-            <p class="card-desc">PDF/TXT supported. We’ll index them and store a session id in your browser.</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <form id="upload-form">
-            <div id="dropzone">
-              <p class="dz-title">Drag & drop files here</p>
-              <p class="dz-sub">or choose files to upload</p>
-              <div class="dz-row">
-                <label class="btn" style="margin:0;">
-                  Choose files
-                  <input id="file-input" type="file" name="files" multiple hidden />
-                </label>
-                <button id="upload-btn" class="btn primary" type="submit">
-                  Upload & Index
-                </button>
-              </div>
-              <div class="small">
-                <span class="hint">Tip: Upload multiple docs to compare across sources.</span>
-                <span id="indexing" class="hint" style="display:none;">
-                  <span class="spinner"></span> Indexing…
-                </span>
-              </div>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <!-- Chat Card -->
-      <section id="chat-card" class="card">
-        <div class="card-header">
-          <div>
-            <p class="card-title">2) Chat</p>
-            <p class="card-desc">Ask anything about your uploaded documents. Press Enter to send.</p>
-          </div>
-          <div id="chat-disabled" class="pill" style="align-self:center;">
-            Upload docs to enable chat
-          </div>
-        </div>
-
-        <section id="chat" style="display:block;">
-          <div id="messages" class="messages"></div>
-          <div class="meta-row">
-            <div class="composer">
-              <textarea id="message-input" rows="2" placeholder="Ask about your documents… (e.g., Summarize key points)"></textarea>
-              <button id="send-btn" class="btn primary" type="button">Send</button>
-            </div>
-            <span id="thinking" class="hint" style="display:none;">
-              <span class="spinner"></span> Thinking…
-            </span>
-          </div>
-        </section>
-      </section>
-    </main>
-  </div>
+    </section>
+  </main>
 
   <div id="toast" class="toast"></div>
 </body>

@@ -1,196 +1,188 @@
-import sys
-import os
-from operator import itemgetter
-from typing import List, Optional, Dict, Any
-
-from langchain_core.messages import BaseMessage
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from __future__ import annotations
+from pathlib import Path
+from typing import Iterable, List, Optional, Dict, Any
+from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-
 from multi_doc_chat.utils.model_loader import ModelLoader
-from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from multi_doc_chat.logger import GLOBAL_LOGGER as log
-from multi_doc_chat.prompts.prompt_library import PROMPT_REGISTRY
-from multi_doc_chat.model.models import PromptType, ChatAnswer
-from pydantic import ValidationError
+from multi_doc_chat.exception.custom_exception import DocumentPortalException
+import json
+import uuid
+from datetime import datetime
+from multi_doc_chat.utils.file_io import save_uploaded_files
+from multi_doc_chat.utils.document_ops import load_documents
+import hashlib
+import sys
 
 
-class ConversationalRAG:
-    """
-    LCEL-based Conversational RAG with lazy retriever initialization.
+def generate_session_id() -> str:
+    """Generate a unique session ID with timestamp."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = uuid.uuid4().hex[:8]
+    return f"session_{timestamp}_{unique_id}"
 
-    Usage:
-        rag = ConversationalRAG(session_id="abc")
-        rag.load_retriever_from_faiss(index_path="faiss_index/abc", k=5, index_name="index")
-        answer = rag.invoke("What is ...?", chat_history=[])
-    """
 
-    def __init__(self, session_id: Optional[str], retriever=None):
+class ChatIngestor:
+    def __init__( self,
+        temp_base: str = "data",
+        faiss_base: str = "faiss_index",
+        use_session_dirs: bool = True,
+        session_id: Optional[str] = None,
+    ):
         try:
-            self.session_id = session_id
+            self.model_loader = ModelLoader()
 
-            # Load LLM and prompts once
-            self.llm = self._load_llm()
-            self.contextualize_prompt: ChatPromptTemplate = PROMPT_REGISTRY[
-                PromptType.CONTEXTUALIZE_QUESTION.value
-            ]
-            self.qa_prompt: ChatPromptTemplate = PROMPT_REGISTRY[
-                PromptType.CONTEXT_QA.value
-            ]
+            self.use_session = use_session_dirs
+            self.session_id = session_id or generate_session_id()
 
-            # Lazy pieces
-            self.retriever = retriever
-            self.chain = None
-            if self.retriever is not None:
-                self._build_lcel_chain()
+            self.temp_base = Path(temp_base); self.temp_base.mkdir(parents=True, exist_ok=True)
+            self.faiss_base = Path(faiss_base); self.faiss_base.mkdir(parents=True, exist_ok=True)
 
-            log.info("ConversationalRAG initialized", session_id=self.session_id)
+            self.temp_dir = self._resolve_dir(self.temp_base)
+            self.faiss_dir = self._resolve_dir(self.faiss_base)
+
+            log.info("ChatIngestor initialized",
+                      session_id=self.session_id,
+                      temp_dir=str(self.temp_dir),
+                      faiss_dir=str(self.faiss_dir),
+                      sessionized=self.use_session)
         except Exception as e:
-            log.error("Failed to initialize ConversationalRAG", error=str(e))
-            raise DocumentPortalException("Initialization error in ConversationalRAG", sys)
+            log.error("Failed to initialize ChatIngestor", error=str(e))
+            raise DocumentPortalException("Initialization error in ChatIngestor", e) from e
 
-    # ---------- Public API ----------
 
-    def load_retriever_from_faiss(
-        self,
-        index_path: str,
+    def _resolve_dir(self, base: Path):
+        if self.use_session:
+            d = base / self.session_id # e.g. "faiss_index/abc123"
+            d.mkdir(parents=True, exist_ok=True) # creates dir if not exists
+            return d
+        return base # fallback: "faiss_index/"
+
+    def _split(self, docs: List[Document], chunk_size=1000, chunk_overlap=200) -> List[Document]:
+        splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        chunks = splitter.split_documents(docs)
+        log.info("Documents split", chunks=len(chunks), chunk_size=chunk_size, overlap=chunk_overlap)
+        return chunks
+
+    def built_retriver( self,
+        uploaded_files: Iterable,
+        *,
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200,
         k: int = 5,
-        index_name: str = "index",
         search_type: str = "mmr",
         fetch_k: int = 20,
-        lambda_mult: float = 0.5,
-        search_kwargs: Optional[Dict[str, Any]] = None,
-    ):
-        """
-        Load FAISS vectorstore from disk and build retriever + LCEL chain.
-        
-        Args:
-            index_path: Path to FAISS index directory
-            k: Number of documents to return
-            index_name: Name of the index file
-            search_type: Type of search ("similarity", "mmr", "similarity_score_threshold")
-            fetch_k: Number of documents to fetch before MMR re-ranking (only for MMR)
-            lambda_mult: Diversity parameter for MMR (0=max diversity, 1=max relevance)
-            search_kwargs: Custom search kwargs (overrides other parameters if provided)
-        """
+        lambda_mult: float = 0.5):
         try:
-            if not os.path.isdir(index_path):
-                raise FileNotFoundError(f"FAISS index directory not found: {index_path}")
+            paths = save_uploaded_files(uploaded_files, self.temp_dir)
+            docs = load_documents(paths)
+            if not docs:
+                raise ValueError("No valid documents loaded")
 
-            embeddings = ModelLoader().load_embeddings()
-            vectorstore = FAISS.load_local(
-                index_path,
-                embeddings,
-                index_name=index_name,
-                allow_dangerous_deserialization=True,  # ok if you trust the index
-            )
+            chunks = self._split(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
-            if search_kwargs is None:
-                search_kwargs = {"k": k}
-                if search_type == "mmr":
-                    search_kwargs["fetch_k"] = fetch_k
-                    search_kwargs["lambda_mult"] = lambda_mult
+            ## FAISS manager very very important class for the docchat
+            fm = FaissManager(self.faiss_dir, self.model_loader)
 
-            self.retriever = vectorstore.as_retriever(
-                search_type=search_type, search_kwargs=search_kwargs
-            )
-            self._build_lcel_chain()
+            texts = [c.page_content for c in chunks]
+            metas = [c.metadata for c in chunks]
 
-            log.info(
-                "FAISS retriever loaded successfully",
-                index_path=index_path,
-                index_name=index_name,
-                search_type=search_type,
-                k=k,
-                fetch_k=fetch_k if search_type == "mmr" else None,
-                lambda_mult=lambda_mult if search_type == "mmr" else None,
-                session_id=self.session_id,
-            )
-            return self.retriever
-
-        except Exception as e:
-            log.error("Failed to load retriever from FAISS", error=str(e))
-            raise DocumentPortalException("Loading error in ConversationalRAG", sys)
-
-    def invoke(self, user_input: str, chat_history: Optional[List[BaseMessage]] = None) -> str:
-        """Invoke the LCEL pipeline."""
-        try:
-            if self.chain is None:
-                raise DocumentPortalException(
-                    "RAG chain not initialized. Call load_retriever_from_faiss() before invoke().", sys
-                )
-            chat_history = chat_history or []
-            payload = {"input": user_input, "chat_history": chat_history}
-            answer = self.chain.invoke(payload)
-            if not answer:
-                log.warning(
-                    "No answer generated", user_input=user_input, session_id=self.session_id
-                )
-                return "no answer generated."
-            # Validate answer type and length using Pydantic model
             try:
-                validated = ChatAnswer(answer=str(answer))
-                answer = validated.answer
-            except ValidationError as ve:
-                log.error("Invalid chat answer", error=str(ve))
-                raise DocumentPortalException("Invalid chat answer", sys)
-            log.info(
-                "Chain invoked successfully",
-                session_id=self.session_id,
-                user_input=user_input,
-                answer_preview=str(answer)[:150],
-            )
-            return answer
-        except Exception as e:
-            log.error("Failed to invoke ConversationalRAG", error=str(e))
-            raise DocumentPortalException("Invocation error in ConversationalRAG", sys)
+                vs = fm.load_or_create(texts=texts, metadatas=metas)
+            except Exception:
+                vs = fm.load_or_create(texts=texts, metadatas=metas)
 
-    # ---------- Internals ----------
-    def _load_llm(self):
-        try:
-            llm = ModelLoader().load_llm()
-            if not llm:
-                raise ValueError("LLM could not be loaded")
-            log.info("LLM loaded successfully", session_id=self.session_id)
-            return llm
+            added = fm.add_documents(chunks)
+            log.info("FAISS index updated", added=added, index=str(self.faiss_dir))
+
+            # Configure search parameters based on search type
+            search_kwargs = {"k": k}
+            
+            if search_type == "mmr":
+                # MMR needs fetch_k (docs to fetch) and lambda_mult (diversity parameter)
+                search_kwargs["fetch_k"] = fetch_k
+                search_kwargs["lambda_mult"] = lambda_mult
+                log.info("Using MMR search", k=k, fetch_k=fetch_k, lambda_mult=lambda_mult)
+            
+            return vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+
         except Exception as e:
-            log.error("Failed to load LLM", error=str(e))
-            raise DocumentPortalException("LLM loading error in ConversationalRAG", sys)
+            log.error("Failed to build retriever", error=str(e))
+            raise DocumentPortalException("Failed to build retriever", e) from e
+
+
+
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+
+# FAISS Manager (load-or-create)
+class FaissManager:
+    def __init__(self, index_dir: Path, model_loader: Optional[ModelLoader] = None):
+        self.index_dir = Path(index_dir)
+        self.index_dir.mkdir(parents=True, exist_ok=True)
+
+        self.meta_path = self.index_dir / "ingested_meta.json"
+        self._meta: Dict[str, Any] = {"rows": {}} ## this is dict of rows
+
+        if self.meta_path.exists():
+            try:
+                self._meta = json.loads(self.meta_path.read_text(encoding="utf-8")) or {"rows": {}} # load it if alrady there
+            except Exception:
+                self._meta = {"rows": {}} # init the empty one if dones not exists
+
+
+        self.model_loader = model_loader or ModelLoader()
+        self.emb = self.model_loader.load_embeddings()
+        self.vs: Optional[FAISS] = None
+
+    def _exists(self)-> bool:
+        return (self.index_dir / "index.faiss").exists() and (self.index_dir / "index.pkl").exists()
 
     @staticmethod
-    def _format_docs(docs) -> str:
-        return "\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
+    def _fingerprint(text: str, md: Dict[str, Any]) -> str:
+        src = md.get("source") or md.get("file_path")
+        rid = md.get("row_id")
+        if src is not None:
+            return f"{src}::{'' if rid is None else rid}"
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def _build_lcel_chain(self):
-        try:
-            if self.retriever is None:
-                raise DocumentPortalException("No retriever set before building chain", sys)
+    def _save_meta(self):
+        self.meta_path.write_text(json.dumps(self._meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-            # 1) Rewrite user question with chat history context
-            question_rewriter = (
-                {"input": itemgetter("input"), "chat_history": itemgetter("chat_history")}
-                | self.contextualize_prompt
-                | self.llm
-                | StrOutputParser()
+
+    def add_documents(self,docs: List[Document]):
+
+        if self.vs is None:
+            raise RuntimeError("Call load_or_create() before add_documents_idempotent().")
+
+        new_docs: List[Document] = []
+
+        for d in docs:
+
+            key = self._fingerprint(d.page_content, d.metadata or {})
+            if key in self._meta["rows"]:
+                continue
+            self._meta["rows"][key] = True
+            new_docs.append(d)
+
+        if new_docs:
+            self.vs.add_documents(new_docs)
+            self.vs.save_local(str(self.index_dir))
+            self._save_meta()
+        return len(new_docs)
+
+    def load_or_create(self,texts:Optional[List[str]]=None, metadatas: Optional[List[dict]] = None):
+        ## if we running first time then it will not go in this block
+        if self._exists():
+            self.vs = FAISS.load_local(
+                str(self.index_dir),
+                embeddings=self.emb,
+                allow_dangerous_deserialization=True,
             )
+            return self.vs
 
-            # 2) Retrieve docs for rewritten question
-            retrieve_docs = question_rewriter | self.retriever | self._format_docs
-
-            # 3) Answer using retrieved context + original input + chat history
-            self.chain = (
-                {
-                    "context": retrieve_docs,
-                    "input": itemgetter("input"),
-                    "chat_history": itemgetter("chat_history"),
-                }
-                | self.qa_prompt
-                | self.llm
-                | StrOutputParser()
-            )
-
-            log.info("LCEL graph built successfully", session_id=self.session_id)
-        except Exception as e:
-            log.error("Failed to build LCEL chain", error=str(e), session_id=self.session_id)
-            raise DocumentPortalException("Failed to build LCEL chain", sys)
+        if not texts:
+            raise DocumentPortalException("No existing FAISS index and no data to create one", sys)
+        self.vs = FAISS.from_texts(texts=texts, embedding=self.emb, metadatas=metadatas or [])
+        self.vs.save_local(str(self.index_dir))
+        return self.vs

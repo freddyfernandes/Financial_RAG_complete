@@ -8,8 +8,6 @@ from multi_doc_chat.exception.custom_exception import DocumentPortalException
 from fastapi import UploadFile
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
-
-
 def load_documents(paths: Iterable[Path]) -> List[Document]:
     """Load docs using appropriate loader based on extension."""
     docs: List[Document] = []
@@ -31,8 +29,6 @@ def load_documents(paths: Iterable[Path]) -> List[Document]:
     except Exception as e:
         log.error("Failed loading documents", error=str(e))
         raise DocumentPortalException("Error loading documents", e) from e
-    
-
 class FastAPIFileAdapter:
     """Adapt FastAPI UploadFile to a simple object with .name and .getbuffer()."""
     def __init__(self, uf: UploadFile):
