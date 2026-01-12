@@ -4,7 +4,13 @@ MultiDocChat is a lightweight **document-based chat application** using **RAG (R
 
 Users can upload documents (**PDF / DOCX / TXT**), build a **session-specific** vector index (**FAISS**), and chat with an LLM using **retrieved context** (including MMR-style retrieval in the ingestion pipeline).
 
+## System Architecture
+
+![System Architecture](image.png)
+
 ---
+
+
 
 ## Live App (AWS)
 
